@@ -40,10 +40,3 @@ Run the script from the terminal:
 ./run.sh
 ```
 Follow the on-screen prompts to complete the update process for each project.
-
-## Note
-This script is customizable and can be modified to suit specific project requirements or deployment workflows.
-
-EOF
-
-echo "README.md has been generated."
