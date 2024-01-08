@@ -27,7 +27,6 @@ LaraVueSync is a Bash script designed to automate the updating process for proje
        "frontend_path": "/path/to/project2_frontend",
        "backend_path": "/path/to/project2_backend"
      }
-     // Add more projects as needed
    }
    ```
 2. Ensure that `projects.json` is not tracked by Git. Add it to your `.gitignore` file:
