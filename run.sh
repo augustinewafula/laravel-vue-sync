@@ -27,10 +27,10 @@ handle_git() {
         echo "No local changes detected in $path."
     else
         echo "Local changes detected in $path."
-        # TODO:: Fix discard changes not showing. Remove setting default value to yes for discard_choice
-        # Set default value for discard_choice to 'y'
-        read -p "Discard local changes and pull from remote? [y/N]: " discard_choice
-        discard_choice=${discard_choice:-y}
+
+        # Read from /dev/tty to get input from the user instead of stdin
+        read -p "Discard local changes and pull from remote? [y/N]: " discard_choice </dev/tty
+
         if [[ $discard_choice =~ ^[Yy]$ ]]; then
             # Discard local changes
             git reset --hard HEAD
@@ -45,6 +45,7 @@ handle_git() {
             return 1
         fi
     fi
+
 }
 
 
