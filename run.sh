@@ -27,21 +27,23 @@ handle_git() {
         echo "No local changes detected in $path."
     else
         echo "Local changes detected in $path."
+        # TODO:: Fix discard changes not showing. Remove setting default value to yes for discard_choice
+        # Set default value for discard_choice to 'y'
         read -p "Discard local changes and pull from remote? [y/N]: " discard_choice
+        discard_choice=${discard_choice:-y}
         if [[ $discard_choice =~ ^[Yy]$ ]]; then
             # Discard local changes
             git reset --hard HEAD
             git clean -fd
+            # Perform git pull after discarding changes
+            if ! git pull; then
+                echo "Error occurred while pulling from git at $path."
+                return 1
+            fi
         else
-            echo "Skipping git pull due to local changes at $path."
+            echo "Local changes retained. Skipping git pull at $path."
             return 1
         fi
-    fi
-
-    # Perform git pull
-    if ! git pull; then
-        echo "Error occurred while pulling from git at $path."
-        return 1
     fi
 }
 
