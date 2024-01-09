@@ -31,10 +31,14 @@ check_path() {
 # Check all project paths before proceeding
 ALL_PATHS_VALID="yes"
 jq -c '.[]' $PROJECTS_FILE | while read -r project; do
-    FRONTEND_PATH=$(echo $project | jq -r '.frontend_path')
-    BACKEND_PATH=$(echo $project | jq -r '.backend_path')
+    FRONTEND_PATH=$(echo $project | jq -r '.frontend_path // empty')
+    BACKEND_PATH=$(echo $project | jq -r '.backend_path // empty')
     
-    if ! check_path "$FRONTEND_PATH" || ! check_path "$BACKEND_PATH"; then
+    if [ -n "$FRONTEND_PATH" ] && ! check_path "$FRONTEND_PATH"; then
+        ALL_PATHS_VALID="no"
+        break
+    fi
+    if [ -n "$BACKEND_PATH" ] && ! check_path "$BACKEND_PATH"; then
         ALL_PATHS_VALID="no"
         break
     fi
@@ -67,16 +71,17 @@ read -p "Use yarn or npm for frontend builds on all projects? [yarn/npm]: " FRON
 
 # Read each project and update
 jq -c '.[]' $PROJECTS_FILE | while read -r project; do
-    FRONTEND_PATH=$(echo $project | jq -r '.frontend_path')
-    BACKEND_PATH=$(echo $project | jq -r '.backend_path')
+    FRONTEND_PATH=$(echo $project | jq -r '.frontend_path // empty')
+    BACKEND_PATH=$(echo $project | jq -r '.backend_path // empty')
 
     # Update Backend
-    echo "Updating backend at $BACKEND_PATH..."
-    cd $BACKEND_PATH
-    git pull
-    echo "Backend at $BACKEND_PATH updated."
+    if [ -n "$BACKEND_PATH" ] && check_path "$BACKEND_PATH"; then
+        echo "Updating backend at $BACKEND_PATH..."
+        cd $BACKEND_PATH
+        git pull
+        echo "Backend at $BACKEND_PATH updated."
 
-     # Run Laravel commands based on user's choice
+        # Run Laravel commands based on user's choice
         if [ "$RUN_MIGRATE" == "Y" ] || [ "$RUN_MIGRATE" == "y" ]; then
             echo "Running migration at $BACKEND_PATH..."
             php artisan migrate
@@ -102,12 +107,10 @@ jq -c '.[]' $PROJECTS_FILE | while read -r project; do
             composer dumpautoload
             echo "Composer dumpautoload completed at $BACKEND_PATH."
         fi
-    else
-        echo "Backend path $BACKEND_PATH not found!"
     fi
 
     # Update Frontend
-    if [ -d "$FRONTEND_PATH" ]; then
+    if [ -n "$FRONTEND_PATH" ] && check_path "$FRONTEND_PATH"; then
         echo "Updating frontend at $FRONTEND_PATH..."
         cd $FRONTEND_PATH
         git pull
@@ -127,8 +130,6 @@ jq -c '.[]' $PROJECTS_FILE | while read -r project; do
         else
             echo "Invalid frontend build tool choice. Skipping build at $FRONTEND_PATH."
         fi
-    else
-        echo "Frontend path $FRONTEND_PATH not found!"
     fi
 done
 
