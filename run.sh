@@ -28,6 +28,10 @@ handle_git() {
     else
         echo "Local changes detected in $path."
 
+        # Run git status to show which files have changes
+        echo "Changed files:"
+        git status
+
         # Read from /dev/tty to get input from the user instead of stdin
         read -p "Discard local changes and pull from remote? [y/N]: " discard_choice </dev/tty
 
