@@ -12,7 +12,7 @@ LaraVueSync is a Bash script designed to automate the updating process for proje
 1. Clone the LaraVueSync repository to your local machine.
 2. Give execute permission to the script:
    ```bash
-   chmod +x RUN.sh
+   chmod +x run.sh
    ```
 
 ## Configuration
@@ -28,10 +28,6 @@ LaraVueSync is a Bash script designed to automate the updating process for proje
        "backend_path": "/path/to/project2_backend"
      }
    }
-   ```
-2. Ensure that `projects.json` is not tracked by Git. Add it to your `.gitignore` file:
-   ```
-   projects.json
    ```
 
 ## Usage
