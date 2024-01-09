@@ -22,11 +22,14 @@ handle_git() {
     local path=$1
     cd "$path" || return
 
-    # Check for local changes
-    if [[ $(git status --porcelain) ]]; then
+    # Check for local changes using git status
+    if git diff-index --quiet HEAD --; then
+        echo "No local changes detected in $path."
+    else
         echo "Local changes detected in $path."
         read -p "Discard local changes and pull from remote? [y/N]: " discard_choice
         if [[ $discard_choice =~ ^[Yy]$ ]]; then
+            # Discard local changes
             git reset --hard HEAD
             git clean -fd
         else
