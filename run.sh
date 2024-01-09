@@ -54,6 +54,7 @@ RUN_MIGRATE="n"
 RUN_QUEUE_RESTART="n"
 RUN_CACHE_CLEAR="n"
 RUN_CONFIG_CLEAR="n"
+RUN_COMPOSER_INSTALL="n"
 RUN_DUMP_AUTOLOAD="n"
 
 # Initialize variable for frontend build tool
@@ -64,6 +65,7 @@ read -p "Run 'php artisan migrate' for all projects? [y/N]: " RUN_MIGRATE
 read -p "Run 'php artisan queue:restart' for all projects? [y/N]: " RUN_QUEUE_RESTART
 read -p "Run 'php artisan cache:clear' for all projects? [y/N]: " RUN_CACHE_CLEAR
 read -p "Run 'php artisan config:clear' for all projects? [y/N]: " RUN_CONFIG_CLEAR
+read -p "Run 'composer install' for all backend projects? [y/N]: " RUN_COMPOSER_INSTALL
 read -p "Run 'composer dumpautoload' for all projects? [y/N]: " RUN_DUMP_AUTOLOAD
 
 # Ask user for frontend build tool choice to apply to all projects
@@ -101,6 +103,11 @@ jq -c '.[]' $PROJECTS_FILE | while read -r project; do
             echo "Clearing config at $BACKEND_PATH..."
             php artisan config:clear
             echo "Config cleared at $BACKEND_PATH."
+        fi
+        if [ "$RUN_COMPOSER_INSTALL" == "Y" ] || [ "$RUN_COMPOSER_INSTALL" == "y" ]; then
+            echo "Running composer install at $BACKEND_PATH..."
+            composer install
+            echo "Composer install completed at $BACKEND_PATH."
         fi
         if [ "$RUN_DUMP_AUTOLOAD" == "Y" ] || [ "$RUN_DUMP_AUTOLOAD" == "y" ]; then
             echo "Running composer dumpautoload at $BACKEND_PATH..."
