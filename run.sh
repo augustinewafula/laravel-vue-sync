@@ -57,7 +57,7 @@ handle_git() {
 update_backend() {
     local path=$1
     handle_git "$path"
-    [[ $RUN_MIGRATE =~ ^[Yy]$ ]] && php artisan migrate
+    [[ $RUN_MIGRATE =~ ^[Yy]$ ]] && php artisan migrate --force
     [[ $RUN_QUEUE_RESTART =~ ^[Yy]$ ]] && php artisan queue:restart
     [[ $RUN_CACHE_CLEAR =~ ^[Yy]$ ]] && php artisan cache:clear
     [[ $RUN_CONFIG_CLEAR =~ ^[Yy]$ ]] && php artisan config:clear
