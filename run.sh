@@ -21,13 +21,27 @@ check_path() {
 handle_git() {
     local path=$1
     cd "$path" || return
-    if ! git pull; then
-        read -p "Local changes detected. Discard and pull again? [y/N]: " discard_choice
+
+    # Check for local changes
+    if [[ $(git status --porcelain) ]]; then
+        echo "Local changes detected in $path."
+        read -p "Discard local changes and pull from remote? [y/N]: " discard_choice
         if [[ $discard_choice =~ ^[Yy]$ ]]; then
-            git checkout -f && git pull
+            git reset --hard HEAD
+            git clean -fd
+        else
+            echo "Skipping git pull due to local changes at $path."
+            return 1
         fi
     fi
+
+    # Perform git pull
+    if ! git pull; then
+        echo "Error occurred while pulling from git at $path."
+        return 1
+    fi
 }
+
 
 # Function to update Laravel backend
 update_backend() {
