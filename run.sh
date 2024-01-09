@@ -45,15 +45,23 @@ update_backend() {
 update_frontend() {
     local path=$1
     handle_git "$path"
+
+    # Perform frontend build based on the chosen tool
     case $FRONTEND_BUILD_TOOL in
         yarn)
-            yarn && yarn build
+            echo "Building frontend at $path using Yarn..."
+            yarn
+            yarn build
+            echo "Frontend built at $path using Yarn."
             ;;
         npm)
-            npm install && npm run build
+            echo "Building frontend at $path using NPM..."
+            npm install
+            npm run build
+            echo "Frontend built at $path using NPM."
             ;;
         *)
-            echo "Invalid build tool. Skipping build."
+            echo "Invalid build tool. Skipping build at $path."
             ;;
     esac
 }
@@ -76,6 +84,14 @@ fi
 # Frontend build tool choice
 [[ $update_frontend_choice =~ ^[Yy]$ ]] && read -p "Use yarn or npm for frontend builds? [yarn/npm]: " FRONTEND_BUILD_TOOL
 
+# Node memory limit prompt (asked once)
+if [[ $update_frontend_choice =~ ^[Yy]$ ]]; then
+    read -p "Limit Node memory to 1024MB for frontend builds? [y/N]: " limit_memory_choice
+    if [[ $limit_memory_choice =~ ^[Yy]$ ]]; then
+        export NODE_OPTIONS=--max-old-space-size=1024
+    fi
+fi
+
 # Process each project
 jq -c '.[]' $PROJECTS_FILE | while read -r project; do
     FRONTEND_PATH=$(echo $project | jq -r '.frontend_path // empty')
@@ -84,5 +100,10 @@ jq -c '.[]' $PROJECTS_FILE | while read -r project; do
     [[ $update_backend_choice =~ ^[Yy]$ ]] && [ -n "$BACKEND_PATH" ] && check_path "$BACKEND_PATH" && update_backend "$BACKEND_PATH"
     [[ $update_frontend_choice =~ ^[Yy]$ ]] && [ -n "$FRONTEND_PATH" ] && check_path "$FRONTEND_PATH" && update_frontend "$FRONTEND_PATH"
 done
+
+# Reset NODE_OPTIONS if it was set
+if [[ $limit_memory_choice =~ ^[Yy]$ ]]; then
+    unset NODE_OPTIONS
+fi
 
 echo "All projects updated successfully!"
