@@ -39,17 +39,16 @@ handle_git() {
             # Discard local changes
             git reset --hard HEAD
             git clean -fd
-            # Perform git pull after discarding changes
-            if ! git pull; then
-                echo "Error occurred while pulling from git at $path."
-                return 1
-            fi
         else
-            echo "Local changes retained. Skipping git pull at $path."
-            return 1
+            echo "Local changes retained. Proceeding with git pull."
         fi
     fi
 
+    # Perform git pull
+    if ! git pull; then
+        echo "Error occurred while pulling from git at $path."
+        return 1
+    fi
 }
 
 
