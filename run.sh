@@ -22,26 +22,25 @@ handle_git() {
     local path=$1
     cd "$path" || return
 
-    # Check for local changes using git status
-    if git diff-index --quiet HEAD --; then
-        echo "No local changes detected in $path."
-    else
+    # Check for local changes excluding the storage directory
+    if git status --porcelain | grep -v '^?? storage/' &> /dev/null; then
         echo "Local changes detected in $path."
 
-        # Run git status to show which files have changes
-        echo "Changed files:"
-        git status
+        # Run git status to show which files have changes excluding storage
+        echo "Changed files (excluding storage):"
+        git status --porcelain | grep -v '^?? storage/'
 
-        # Read from /dev/tty to get input from the user instead of stdin
-        read -p "Discard local changes and pull from remote? [y/N]: " discard_choice </dev/tty
+        read -p "Discard local changes (excluding storage) and pull from remote? [y/N]: " discard_choice </dev/tty
 
         if [[ $discard_choice =~ ^[Yy]$ ]]; then
-            # Discard local changes
-            git reset --hard HEAD
-            git clean -fd
+            # Discard local changes excluding storage
+            git checkout HEAD -- $(git ls-files -m | grep -v '^storage/')
+            git clean -fd --exclude=storage/
         else
             echo "Local changes retained. Proceeding with git pull."
         fi
+    else
+        echo "No local changes detected in $path."
     fi
 
     # Perform git pull
@@ -49,8 +48,11 @@ handle_git() {
         echo "Error occurred while pulling from git at $path."
         return 1
     fi
-}
 
+    # Restore permissions on storage folder after operations
+    chmod -R 775 "${path}/storage"
+    chown -R www-data:www-data "${path}/storage"
+}
 
 # Function to update Laravel backend
 update_backend() {
