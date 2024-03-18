@@ -17,16 +17,18 @@ check_path() {
     [ -d "$1" ] || { echo "Path $1 not found!"; return 1; }
 }
 
-# Function to handle git operations
+# Function to handle git operations and check for changes after git pull
 handle_git() {
     local path=$1
     cd "$path" || return
+    local changes_detected=0
 
     # Check for local changes excluding the storage directory
     if git status --porcelain | grep -v '^?? storage/' &> /dev/null; then
         echo "Local changes detected in $path."
+        changes_detected=1
 
-        # Run git status to show which files have changes excluding storage
+        # Show changed files excluding storage
         echo "Changed files (excluding storage):"
         git status --porcelain | grep -v '^?? storage/'
 
@@ -36,6 +38,7 @@ handle_git() {
             # Discard local changes excluding storage
             git checkout HEAD -- $(git ls-files -m | grep -v '^storage/')
             git clean -fd --exclude=storage/
+            changes_detected=2
         else
             echo "Local changes retained. Proceeding with git pull."
         fi
@@ -43,15 +46,23 @@ handle_git() {
         echo "No local changes detected in $path."
     fi
 
-    # Perform git pull
-    if ! git pull; then
-        echo "Error occurred while pulling from git at $path."
-        return 1
+    # Perform git pull and capture output
+    local git_pull_output
+    git_pull_output=$(git pull)
+
+    # Check if git pull resulted in changes
+    if [[ $git_pull_output == *"Already up to date."* ]]; then
+        echo "No changes after git pull in $path."
+    else
+        echo "Changes detected after git pull in $path."
+        changes_detected=2
     fi
 
     # Restore permissions on storage folder after operations
     chmod -R 775 "${path}/storage"
     chown -R www-data:www-data "${path}/storage"
+
+    return $changes_detected
 }
 
 # Function to update Laravel backend
@@ -70,20 +81,25 @@ update_backend() {
 update_frontend() {
     local path=$1
     handle_git "$path"
+    local git_status=$?
 
-    # Perform frontend build based on the chosen tool
+    # Skip build if no changes detected after git pull (git_status = 0 or 1)
+    if [[ $git_status -ne 2 ]]; then
+        echo "Skipping build process for $path due to no changes after git pull."
+        return
+    fi
+
+    # Proceed with frontend build
     case $FRONTEND_BUILD_TOOL in
         yarn)
             echo "Building frontend at $path using Yarn..."
             yarn
             yarn build
-            echo "Frontend built at $path using Yarn."
             ;;
         npm)
             echo "Building frontend at $path using NPM..."
             npm install
             npm run build
-            echo "Frontend built at $path using NPM."
             ;;
         *)
             echo "Invalid build tool. Skipping build at $path."
