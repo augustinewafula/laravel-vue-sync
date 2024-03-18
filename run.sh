@@ -106,8 +106,26 @@ if [[ $laravel_commands_choice =~ ^[Yy]$ ]]; then
     read -p "Run 'composer dumpautoload'? [y/N]: " RUN_DUMP_AUTOLOAD
 fi
 
-# Frontend build tool choice
-[[ $update_frontend_choice =~ ^[Yy]$ ]] && read -p "Use yarn or npm for frontend builds? [yarn/npm]: " FRONTEND_BUILD_TOOL
+# Frontend build tool choice simplified
+if [[ $update_frontend_choice =~ ^[Yy]$ ]]; then
+    echo "Select the tool for frontend builds:"
+    echo "  1) Yarn"
+    echo "  2) NPM"
+    read -p "Enter your choice (1 or 2): " build_tool_choice
+
+    case $build_tool_choice in
+        1)
+            FRONTEND_BUILD_TOOL="yarn"
+            ;;
+        2)
+            FRONTEND_BUILD_TOOL="npm"
+            ;;
+        *)
+            echo "Invalid choice. Defaulting to npm."
+            FRONTEND_BUILD_TOOL="npm"
+            ;;
+    esac
+fi
 
 # Node memory limit prompt (asked once)
 if [[ $update_frontend_choice =~ ^[Yy]$ ]]; then
