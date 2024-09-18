@@ -69,13 +69,20 @@ handle_git() {
 update_backend() {
     local path=$1
     handle_git "$path"
+    
+    [[ $RUN_OPTIMIZE_CLEAR_AND_CACHE =~ ^[Yy]$ ]] && {
+        php artisan optimize:clear
+        php artisan config:cache
+        php artisan route:cache
+        php artisan view:cache
+    }
+    
     [[ $RUN_MIGRATE =~ ^[Yy]$ ]] && php artisan migrate --force
     [[ $RUN_QUEUE_RESTART =~ ^[Yy]$ ]] && php artisan queue:restart
-    [[ $RUN_CACHE_CLEAR =~ ^[Yy]$ ]] && php artisan cache:clear
-    [[ $RUN_CONFIG_CLEAR =~ ^[Yy]$ ]] && php artisan config:clear
     [[ $RUN_COMPOSER_INSTALL =~ ^[Yy]$ ]] && composer install
     [[ $RUN_DUMP_AUTOLOAD =~ ^[Yy]$ ]] && composer dumpautoload
 }
+
 
 # Function to update frontend
 update_frontend() {
@@ -116,8 +123,7 @@ read -p "Update Frontend? [y/N]: " update_frontend_choice
 if [[ $laravel_commands_choice =~ ^[Yy]$ ]]; then
     read -p "Run 'php artisan migrate'? [y/N]: " RUN_MIGRATE
     read -p "Run 'php artisan queue:restart'? [y/N]: " RUN_QUEUE_RESTART
-    read -p "Run 'php artisan cache:clear'? [y/N]: " RUN_CACHE_CLEAR
-    read -p "Run 'php artisan config:clear'? [y/N]: " RUN_CONFIG_CLEAR
+    read -p "Run 'php artisan optimize:clear' followed by caching configurations, routes, and views? [y/N]: " RUN_OPTIMIZE_CLEAR_AND_CACHE
     read -p "Run 'composer install'? [y/N]: " RUN_COMPOSER_INSTALL
     read -p "Run 'composer dumpautoload'? [y/N]: " RUN_DUMP_AUTOLOAD
 fi
