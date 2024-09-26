@@ -96,23 +96,31 @@ update_frontend() {
         return
     fi
 
-    # Proceed with frontend build
+    # Check if deploy.sh exists in the root folder of the project
+    if [[ -f "$path/deploy.sh" ]]; then
+        echo "Found deploy.sh in $path. Using it for deployment..."
+        # Make sure deploy.sh is executable and then run it
+        chmod +x "$path/deploy.sh"
+        "$path/deploy.sh"
+        return
+    fi
+
+    # Proceed with frontend build if no deploy.sh is found
     case $FRONTEND_BUILD_TOOL in
         yarn)
             echo "Building frontend at $path using Yarn..."
-            yarn
-            yarn build
+            (cd "$path" && yarn && yarn build)
             ;;
         npm)
             echo "Building frontend at $path using NPM..."
-            npm install
-            npm run build
+            (cd "$path" && npm install && npm run build)
             ;;
         *)
             echo "Invalid build tool. Skipping build at $path."
             ;;
     esac
 }
+
 
 # Prompt for update options
 read -p "Update Backend? [y/N]: " update_backend_choice
