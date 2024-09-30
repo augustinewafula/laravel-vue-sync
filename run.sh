@@ -83,7 +83,6 @@ update_backend() {
     [[ $RUN_DUMP_AUTOLOAD =~ ^[Yy]$ ]] && composer dumpautoload
 }
 
-
 # Function to update frontend
 update_frontend() {
     local path=$1
@@ -121,7 +120,6 @@ update_frontend() {
     esac
 }
 
-
 # Prompt for update options
 read -p "Update Backend? [y/N]: " update_backend_choice
 read -p "Update Frontend? [y/N]: " update_frontend_choice
@@ -157,25 +155,24 @@ if [[ $update_frontend_choice =~ ^[Yy]$ ]]; then
     esac
 fi
 
-# Node memory limit prompt (asked once)
-if [[ $update_frontend_choice =~ ^[Yy]$ ]]; then
-    read -p "Limit Node memory to 1024MB for frontend builds? [y/N]: " limit_memory_choice
-    if [[ $limit_memory_choice =~ ^[Yy]$ ]]; then
-        export NODE_OPTIONS=--max-old-space-size=1024
-    fi
+# Automatically limit Node memory to 1024MB if system RAM is 1GB or less
+total_memory=$(free -m | awk '/^Mem:/{print $2}')  # Get total memory in MB
+if (( total_memory <= 1024 )); then
+    echo "Limiting Node memory to 1024MB due to low available RAM ($total_memory MB detected)."
+    export NODE_OPTIONS=--max-old-space-size=1024
 fi
 
 # Process each project
-jq -c '.[]' $PROJECTS_FILE | while read -r project; do
-    FRONTEND_PATH=$(echo $project | jq -r '.frontend_path // empty')
-    BACKEND_PATH=$(echo $project | jq -r '.backend_path // empty')
+jq -c '.[]' "$PROJECTS_FILE" | while read -r project; do
+    FRONTEND_PATH=$(echo "$project" | jq -r '.frontend_path // empty')
+    BACKEND_PATH=$(echo "$project" | jq -r '.backend_path // empty')
 
     [[ $update_backend_choice =~ ^[Yy]$ ]] && [ -n "$BACKEND_PATH" ] && check_path "$BACKEND_PATH" && update_backend "$BACKEND_PATH"
     [[ $update_frontend_choice =~ ^[Yy]$ ]] && [ -n "$FRONTEND_PATH" ] && check_path "$FRONTEND_PATH" && update_frontend "$FRONTEND_PATH"
 done
 
 # Reset NODE_OPTIONS if it was set
-if [[ $limit_memory_choice =~ ^[Yy]$ ]]; then
+if [[ -n $NODE_OPTIONS ]]; then
     unset NODE_OPTIONS
 fi
 
