@@ -10,11 +10,11 @@ fi
 PROJECTS_FILE="projects.json"
 ENV_UPDATES_FILE="env-updates.json"
 
-# Ensure the projects file exists
-[ -f "$PROJECTS_FILE" ] || { echo "Projects file not found!"; exit 1; }
-
 # Initialize default values
 NON_INTERACTIVE=false
+REVERT_MODE=false
+LIST_BACKUPS=false
+REMOVE_BACKUPS=false
 
 # Function to show help message
 show_help() {
@@ -24,6 +24,9 @@ show_help() {
     echo "  --help              Show this help message"
     echo "  --non-interactive   Run in non-interactive mode"
     echo "  --env-file=FILE     Specify custom env updates file (default: env-updates.json)"
+    echo "  --revert           Revert .env files to their backups"
+    echo "  --list-backups     List all available .env backups"
+    echo "  --remove-backups   Remove all .env backup files"
     exit 0
 }
 
@@ -38,6 +41,15 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --env-file=*)
             ENV_UPDATES_FILE="${1#*=}"
+            ;;
+        --revert)
+            REVERT_MODE=true
+            ;;
+        --list-backups)
+            LIST_BACKUPS=true
+            ;;
+        --remove-backups)
+            REMOVE_BACKUPS=true
             ;;
         *)
             echo "Unknown parameter: $1"
@@ -63,8 +75,8 @@ update_env_value() {
     local value=$3
     local backup_file="${env_file}.backup"
 
-    # Create backup of original file
-    cp "$env_file" "$backup_file"
+    # Create backup of original file if it doesn't exist
+    [ -f "$backup_file" ] || cp "$env_file" "$backup_file"
 
     if check_env_key "$env_file" "$key"; then
         # Key exists, update it
@@ -73,6 +85,43 @@ update_env_value() {
         # Key doesn't exist, append it
         echo "${key}=${value}" >> "$env_file"
     fi
+}
+
+# Function to handle backup operations
+handle_backup() {
+    local project_path=$1
+    local operation=$2  # 'list', 'revert', or 'remove'
+    local env_file="${project_path}/.env"
+    local backup_file="${env_file}.backup"
+
+    case $operation in
+        list)
+            if [ -f "$backup_file" ]; then
+                echo "Backup exists for: $project_path"
+                echo "  Original backup date: $(stat -c %y "$backup_file")"
+            fi
+            ;;
+        revert)
+            if [ -f "$backup_file" ]; then
+                if cp "$backup_file" "$env_file"; then
+                    echo "Successfully reverted .env file in: $project_path"
+                else
+                    echo "Failed to revert .env file in: $project_path"
+                fi
+            else
+                echo "No backup file found for: $project_path"
+            fi
+            ;;
+        remove)
+            if [ -f "$backup_file" ]; then
+                if rm "$backup_file"; then
+                    echo "Removed backup file in: $project_path"
+                else
+                    echo "Failed to remove backup file in: $project_path"
+                fi
+            fi
+            ;;
+    esac
 }
 
 # Function to handle environment updates for a project path
@@ -103,16 +152,14 @@ handle_env_updates() {
     # Apply environment updates from JSON file
     echo "Updating environment variables from $ENV_UPDATES_FILE for $env_type in $project_path..."
     
-    jq -r --arg type "$env_type" \
-       '.[$type] // {} | to_entries[] | "\(.key)=\(.value)"' "$ENV_UPDATES_FILE" | \
     while IFS='=' read -r key value; do
         if [ -n "$key" ] && [ -n "$value" ]; then
+            # Remove any surrounding quotes from the value
+            value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//')
             update_env_value "$env_file" "$key" "$value"
             echo "Updated $key in $env_file"
-        else
-            echo "Warning: Skipped empty or invalid key/value for $env_type"
         fi
-    done
+    done < <(jq -r --arg type "$env_type" '.[$type] // {} | to_entries[] | "\(.key)=\(.value)"' "$ENV_UPDATES_FILE")
 
     # Interactive updates if not in non-interactive mode
     if [ "$NON_INTERACTIVE" = false ]; then
@@ -134,16 +181,48 @@ handle_env_updates() {
     fi
 }
 
-# Process each project
-jq -c '.[]' "$PROJECTS_FILE" | while read -r project; do
-    FRONTEND_PATH=$(echo "$project" | jq -r '.frontend_path // empty')
-    BACKEND_PATH=$(echo "$project" | jq -r '.backend_path // empty')
+# Process each project based on the selected operation mode
+process_projects() {
+    local operation=$1
+    
+    while IFS= read -r project_path; do
+        if [ -n "$project_path" ] && [ "$project_path" != "null" ]; then
+            case $operation in
+                update)
+                    # Determine if it's a frontend or backend path and handle accordingly
+                    if [[ "$project_path" == *"frontend"* ]]; then
+                        [ -d "$project_path" ] && handle_env_updates "$project_path" "frontend"
+                    elif [[ "$project_path" == *"backend"* ]]; then
+                        [ -d "$project_path" ] && handle_env_updates "$project_path" "backend"
+                    fi
+                    ;;
+                list|revert|remove)
+                    [ -d "$project_path" ] && handle_backup "$project_path" "$operation"
+                    ;;
+            esac
+        fi
+    done < <(jq -r '.[] | (.frontend_path, .backend_path)' "$PROJECTS_FILE")
+}
 
-    # Handle frontend environment if path exists
-    [ -n "$FRONTEND_PATH" ] && [ -d "$FRONTEND_PATH" ] && handle_env_updates "$FRONTEND_PATH" "frontend"
+# Main execution logic
+if [ "$LIST_BACKUPS" = true ]; then
+    echo "Listing all .env backup files..."
+    process_projects "list"
+elif [ "$REVERT_MODE" = true ]; then
+    echo "Reverting all .env files to their backups..."
+    process_projects "revert"
+elif [ "$REMOVE_BACKUPS" = true ]; then
+    echo "Removing all .env backup files..."
+    if [ "$NON_INTERACTIVE" = false ]; then
+        read -p "Are you sure you want to remove all backup files? [y/N]: " confirm
+        if [[ ! $confirm =~ ^[Yy]$ ]]; then
+            echo "Operation cancelled."
+            exit 0
+        fi
+    fi
+    process_projects "remove"
+else
+    process_projects "update"
+fi
 
-    # Handle backend environment if path exists
-    [ -n "$BACKEND_PATH" ] && [ -d "$BACKEND_PATH" ] && handle_env_updates "$BACKEND_PATH" "backend"
-done
-
-echo "Environment updates completed for all projects!"
+echo "Operation completed!"
