@@ -12,6 +12,120 @@ PROJECTS_FILE="projects.json"
 # Ensure the projects file exists
 [ -f "$PROJECTS_FILE" ] || { echo "Projects file not found!"; exit 1; }
 
+# Initialize default values
+NON_INTERACTIVE=false
+update_backend_choice="n"
+update_frontend_choice="n"
+laravel_commands_choice="n"
+RUN_MIGRATE="y"
+RUN_QUEUE_RESTART="n"
+RUN_OPTIMIZE_CLEAR_AND_CACHE="n"
+RUN_COMPOSER_INSTALL="n"
+RUN_DUMP_AUTOLOAD="n"
+FRONTEND_BUILD_TOOL="yarn"
+
+# Function to show help message
+show_help() {
+    echo "Usage: $0 [options]"
+    echo
+    echo "Options:"
+    echo "  --help                    Show this help message"
+    echo "  --non-interactive         Run in non-interactive mode"
+    echo "  --update-backend          Update backend"
+    echo "  --update-frontend         Update frontend"
+    echo "  --frontend-tool=TOOL      Specify frontend build tool (npm or yarn)"
+    echo "  --run-migrations          Run database migrations"
+    echo "  --restart-queue           Restart queue workers"
+    echo "  --optimize-cache          Run optimize:clear and cache commands"
+    echo "  --composer-install        Run composer install"
+    echo "  --composer-dump-autoload  Run composer dump-autoload"
+    echo "  --all-laravel-commands    Enable all Laravel commands"
+    echo "  --skip-git-prompt         Skip git change prompts (auto-discard)"
+    echo
+    echo "Examples:"
+    echo "  $0 --non-interactive --update-frontend --frontend-tool=yarn"
+    echo "  $0 --update-backend --all-laravel-commands"
+    exit 0
+}
+
+# Parse command line arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --help)
+            show_help
+            ;;
+        --non-interactive)
+            NON_INTERACTIVE=true
+            ;;
+        --update-backend)
+            update_backend_choice="y"
+            ;;
+        --update-frontend)
+            update_frontend_choice="y"
+            ;;
+        --frontend-tool=*)
+            FRONTEND_BUILD_TOOL="${1#*=}"
+            if [[ ! "$FRONTEND_BUILD_TOOL" =~ ^(npm|yarn)$ ]]; then
+                echo "Error: Frontend tool must be either 'npm' or 'yarn'"
+                exit 1
+            fi
+            ;;
+        --run-migrations)
+            RUN_MIGRATE="y"
+            laravel_commands_choice="y"
+            ;;
+        --restart-queue)
+            RUN_QUEUE_RESTART="y"
+            laravel_commands_choice="y"
+            ;;
+        --optimize-cache)
+            RUN_OPTIMIZE_CLEAR_AND_CACHE="y"
+            laravel_commands_choice="y"
+            ;;
+        --composer-install)
+            RUN_COMPOSER_INSTALL="y"
+            laravel_commands_choice="y"
+            ;;
+        --composer-dump-autoload)
+            RUN_DUMP_AUTOLOAD="y"
+            laravel_commands_choice="y"
+            ;;
+        --all-laravel-commands)
+            laravel_commands_choice="y"
+            RUN_MIGRATE="y"
+            RUN_QUEUE_RESTART="y"
+            RUN_OPTIMIZE_CLEAR_AND_CACHE="y"
+            RUN_COMPOSER_INSTALL="y"
+            RUN_DUMP_AUTOLOAD="y"
+            ;;
+        --skip-git-prompt)
+            SKIP_GIT_PROMPT=true
+            ;;
+        *)
+            echo "Unknown parameter: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Set defaults for non-interactive mode if no specific options provided
+if [ "$NON_INTERACTIVE" = true ]; then
+    # Only set defaults for options that weren't explicitly set via command line
+    [[ $update_backend_choice == "n" ]] && update_backend_choice="y"
+    [[ $update_frontend_choice == "n" ]] && update_frontend_choice="y"
+    [[ $laravel_commands_choice == "n" ]] && laravel_commands_choice="y"
+    if [[ $laravel_commands_choice == "y" ]]; then
+        [[ $RUN_MIGRATE == "n" ]] && RUN_MIGRATE="y"
+        [[ $RUN_QUEUE_RESTART == "n" ]] && RUN_QUEUE_RESTART="y"
+        [[ $RUN_OPTIMIZE_CLEAR_AND_CACHE == "n" ]] && RUN_OPTIMIZE_CLEAR_AND_CACHE="y"
+        [[ $RUN_COMPOSER_INSTALL == "n" ]] && RUN_COMPOSER_INSTALL="y"
+        [[ $RUN_DUMP_AUTOLOAD == "n" ]] && RUN_DUMP_AUTOLOAD="y"
+    fi
+    SKIP_GIT_PROMPT=true
+fi
+
 # Function to check if a path is valid
 check_path() {
     [ -d "$1" ] || { echo "Path $1 not found!"; return 1; }
@@ -32,15 +146,20 @@ handle_git() {
         echo "Changed files (excluding storage):"
         git status --porcelain | grep -v '^?? storage/'
 
-        read -p "Discard local changes (excluding storage) and pull from remote? [y/N]: " discard_choice </dev/tty
-
-        if [[ $discard_choice =~ ^[Yy]$ ]]; then
-            # Discard local changes excluding storage
+        if [ "$SKIP_GIT_PROMPT" = true ]; then
+            echo "Automatically discarding local changes (excluding storage)..."
             git checkout HEAD -- $(git ls-files -m | grep -v '^storage/')
             git clean -fd --exclude=storage/
             changes_detected=2
         else
-            echo "Local changes retained. Proceeding with git pull."
+            read -p "Discard local changes (excluding storage) and pull from remote? [y/N]: " discard_choice </dev/tty
+            if [[ $discard_choice =~ ^[Yy]$ ]]; then
+                git checkout HEAD -- $(git ls-files -m | grep -v '^storage/')
+                git clean -fd --exclude=storage/
+                changes_detected=2
+            else
+                echo "Local changes retained. Proceeding with git pull."
+            fi
         fi
     else
         echo "No local changes detected in $path."
@@ -79,7 +198,7 @@ update_backend() {
     
     [[ $RUN_MIGRATE =~ ^[Yy]$ ]] && php artisan migrate --force
     [[ $RUN_QUEUE_RESTART =~ ^[Yy]$ ]] && php artisan queue:restart
-    [[ $RUN_COMPOSER_INSTALL =~ ^[Yy]$ ]] && composer install
+    [[ $RUN_COMPOSER_INSTALL =~ ^[Yy]$ ]] && composer install --no-interaction
     [[ $RUN_DUMP_AUTOLOAD =~ ^[Yy]$ ]] && composer dumpautoload
 }
 
@@ -98,7 +217,6 @@ update_frontend() {
     # Check if deploy.sh exists in the root folder of the project
     if [[ -f "$path/deploy.sh" ]]; then
         echo "Found deploy.sh in $path. Using it for deployment..."
-        # Make sure deploy.sh is executable and then run it
         chmod +x "$path/deploy.sh"
         "$path/deploy.sh"
         return
@@ -120,43 +238,49 @@ update_frontend() {
     esac
 }
 
-# Prompt for update options
-read -p "Update Backend? [y/N]: " update_backend_choice
-read -p "Update Frontend? [y/N]: " update_frontend_choice
-[[ $update_backend_choice =~ ^[Yy]$ ]] && read -p "Run Laravel commands? [y/N]: " laravel_commands_choice
+# Only prompt for options if not in non-interactive mode and not specified via command line
+if [ "$NON_INTERACTIVE" = false ]; then
+    # Only prompt for backend if not specified via command line
+    [[ $update_backend_choice == "n" ]] && read -p "Update Backend? [y/N]: " update_backend_choice
+    [[ $update_frontend_choice == "n" ]] && read -p "Update Frontend? [y/N]: " update_frontend_choice
 
-# Laravel commands prompt
-if [[ $laravel_commands_choice =~ ^[Yy]$ ]]; then
-    read -p "Run 'php artisan migrate'? [y/N]: " RUN_MIGRATE
-    read -p "Run 'php artisan queue:restart'? [y/N]: " RUN_QUEUE_RESTART
-    read -p "Run 'php artisan optimize:clear' followed by caching configurations, routes, and views? [y/N]: " RUN_OPTIMIZE_CLEAR_AND_CACHE
-    read -p "Run 'composer install'? [y/N]: " RUN_COMPOSER_INSTALL
-    read -p "Run 'composer dumpautoload'? [y/N]: " RUN_DUMP_AUTOLOAD
-fi
+    # Only prompt for Laravel commands if updating backend and not specified via command line
+    if [[ $update_backend_choice =~ ^[Yy]$ ]] && [[ $laravel_commands_choice == "n" ]]; then
+        read -p "Run Laravel commands? [y/N]: " laravel_commands_choice
 
-# Frontend build tool choice simplified
-if [[ $update_frontend_choice =~ ^[Yy]$ ]]; then
-    echo "Select the tool for frontend builds:"
-    echo "  1) Yarn"
-    echo "  2) NPM"
-    read -p "Enter your choice (1 or 2): " build_tool_choice
+        if [[ $laravel_commands_choice =~ ^[Yy]$ ]]; then
+            [[ $RUN_MIGRATE == "n" ]] && read -p "Run 'php artisan migrate'? [y/N]: " RUN_MIGRATE
+            [[ $RUN_QUEUE_RESTART == "n" ]] && read -p "Run 'php artisan queue:restart'? [y/N]: " RUN_QUEUE_RESTART
+            [[ $RUN_OPTIMIZE_CLEAR_AND_CACHE == "n" ]] && read -p "Run 'php artisan optimize:clear' and caching? [y/N]: " RUN_OPTIMIZE_CLEAR_AND_CACHE
+            [[ $RUN_COMPOSER_INSTALL == "n" ]] && read -p "Run 'composer install'? [y/N]: " RUN_COMPOSER_INSTALL
+            [[ $RUN_DUMP_AUTOLOAD == "n" ]] && read -p "Run 'composer dumpautoload'? [y/N]: " RUN_DUMP_AUTOLOAD
+        fi
+    fi
 
-    case $build_tool_choice in
-        1)
-            FRONTEND_BUILD_TOOL="yarn"
-            ;;
-        2)
-            FRONTEND_BUILD_TOOL="npm"
-            ;;
-        *)
-            echo "Invalid choice. Defaulting to npm."
-            FRONTEND_BUILD_TOOL="npm"
-            ;;
-    esac
+    # Frontend build tool choice if not specified via command line
+    if [[ $update_frontend_choice =~ ^[Yy]$ ]] && [[ -z "$FRONTEND_BUILD_TOOL" ]]; then
+        echo "Select the tool for frontend builds:"
+        echo "  1) Yarn"
+        echo "  2) NPM"
+        read -p "Enter your choice (1 or 2): " build_tool_choice
+
+        case $build_tool_choice in
+            1)
+                FRONTEND_BUILD_TOOL="yarn"
+                ;;
+            2)
+                FRONTEND_BUILD_TOOL="npm"
+                ;;
+            *)
+                echo "Invalid choice. Defaulting to npm."
+                FRONTEND_BUILD_TOOL="npm"
+                ;;
+        esac
+    fi
 fi
 
 # Automatically limit Node memory to 1024MB if system RAM is 1GB or less
-total_memory=$(free -m | awk '/^Mem:/{print $2}')  # Get total memory in MB
+total_memory=$(free -m | awk '/^Mem:/{print $2}')
 if (( total_memory <= 1024 )); then
     echo "Limiting Node memory to 1024MB due to low available RAM ($total_memory MB detected)."
     export NODE_OPTIONS=--max-old-space-size=1024
