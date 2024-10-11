@@ -1,5 +1,53 @@
 #!/bin/bash
 
+# Check for jq installation
+if ! command -v jq &> /dev/null; then
+    echo "Error: jq is not installed."
+    exit 1
+fi
+
+# Define the JSON files
+PROJECTS_FILE="projects.json"
+ENV_UPDATES_FILE="env-updates.json"
+
+# Ensure the projects file exists
+[ -f "$PROJECTS_FILE" ] || { echo "Projects file not found!"; exit 1; }
+
+# Initialize default values
+NON_INTERACTIVE=false
+
+# Function to show help message
+show_help() {
+    echo "Usage: $0 [options]"
+    echo
+    echo "Options:"
+    echo "  --help              Show this help message"
+    echo "  --non-interactive   Run in non-interactive mode"
+    echo "  --env-file=FILE     Specify custom env updates file (default: env-updates.json)"
+    exit 0
+}
+
+# Parse command line arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --help)
+            show_help
+            ;;
+        --non-interactive)
+            NON_INTERACTIVE=true
+            ;;
+        --env-file=*)
+            ENV_UPDATES_FILE="${1#*=}"
+            ;;
+        *)
+            echo "Unknown parameter: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
 # Function to check if a key exists in .env file
 check_env_key() {
     local env_file=$1
@@ -27,83 +75,44 @@ update_env_value() {
     fi
 }
 
-# Function to extract project path from project.json
-get_project_path() {
-    local project_name=$1
-    local env_type=$2
-    local path_key
-
-    # Determine if we are looking for frontend or backend path
-    if [ "$env_type" = "frontend" ]; then
-        path_key="frontend_path"
-    elif [ "$env_type" = "backend" ]; then
-        path_key="backend_path"
-    else
-        echo "Error: Invalid environment type. Use 'frontend' or 'backend'."
-        return 1
-    fi
-
-    # Use jq to extract the path from project.json
-    jq -r --arg project "$project_name" --arg key "$path_key" \
-    '.[$project][$key] // empty' project.json
-}
-
-# Function to handle environment updates for a project
+# Function to handle environment updates for a project path
 handle_env_updates() {
-    local project_name=$1
+    local project_path=$1
     local env_type=$2  # 'frontend' or 'backend'
-
-    # Get the path from project.json
-    local project_path
-    project_path=$(get_project_path "$project_name" "$env_type")
-
-    if [ -z "$project_path" ]; then
-        echo "Error: Project path not found for $project_name ($env_type)"
-        return 1
-    fi
 
     local env_file="${project_path}/.env"
     local env_example="${project_path}/.env.example"
-
-    # Check if jq is installed
-    if ! command -v jq &> /dev/null; then
-        echo "Error: jq is not installed. Please install it to use this script."
-        return 1
-    fi
 
     # Check if .env file exists
     if [ ! -f "$env_file" ]; then
         if [ -f "$env_example" ]; then
             cp "$env_example" "$env_file"
-            echo "Created new .env file from .env.example"
+            echo "Created new .env file from .env.example in $project_path"
         else
             echo "Error: No .env or .env.example file found in $project_path"
             return 1
         fi
     fi
 
-    # Ensure ENV_UPDATES_FILE and NON_INTERACTIVE are set
-    ENV_UPDATES_FILE="${ENV_UPDATES_FILE:-env-updates.json}"
-    : "${NON_INTERACTIVE:=false}"
-
-    # Parse environment updates from JSON file if provided
-    if [ -f "$ENV_UPDATES_FILE" ]; then
-        echo "Updating environment variables from $ENV_UPDATES_FILE for $env_type..."
-        
-        jq -r --arg type "$env_type" \
-           '.[$type] // {} | to_entries[] | "\(.key)=\(.value)"' "$ENV_UPDATES_FILE" | \
-        while IFS='=' read -r key value; do
-            if [ -n "$key" ] && [ -n "$value" ]; then
-                update_env_value "$env_file" "$key" "$value"
-                echo "Updated $key in $env_file"
-            else
-                echo "Warning: Skipped empty or invalid key/value for $env_type"
-            fi
-        done
-    else
+    # Check if env updates file exists
+    if [ ! -f "$ENV_UPDATES_FILE" ]; then
         echo "Error: Environment update file $ENV_UPDATES_FILE not found."
         return 1
     fi
+
+    # Apply environment updates from JSON file
+    echo "Updating environment variables from $ENV_UPDATES_FILE for $env_type in $project_path..."
+    
+    jq -r --arg type "$env_type" \
+       '.[$type] // {} | to_entries[] | "\(.key)=\(.value)"' "$ENV_UPDATES_FILE" | \
+    while IFS='=' read -r key value; do
+        if [ -n "$key" ] && [ -n "$value" ]; then
+            update_env_value "$env_file" "$key" "$value"
+            echo "Updated $key in $env_file"
+        else
+            echo "Warning: Skipped empty or invalid key/value for $env_type"
+        fi
+    done
 
     # Interactive updates if not in non-interactive mode
     if [ "$NON_INTERACTIVE" = false ]; then
@@ -125,18 +134,16 @@ handle_env_updates() {
     fi
 }
 
-# Main entry point for the script
-main() {
-    if [ $# -lt 2 ]; then
-        echo "Usage: $0 <project-name> <env-type: frontend | backend>"
-        exit 1
-    fi
+# Process each project
+jq -c '.[]' "$PROJECTS_FILE" | while read -r project; do
+    FRONTEND_PATH=$(echo "$project" | jq -r '.frontend_path // empty')
+    BACKEND_PATH=$(echo "$project" | jq -r '.backend_path // empty')
 
-    local project_name=$1
-    local env_type=$2
+    # Handle frontend environment if path exists
+    [ -n "$FRONTEND_PATH" ] && [ -d "$FRONTEND_PATH" ] && handle_env_updates "$FRONTEND_PATH" "frontend"
 
-    handle_env_updates "$project_name" "$env_type"
-}
+    # Handle backend environment if path exists
+    [ -n "$BACKEND_PATH" ] && [ -d "$BACKEND_PATH" ] && handle_env_updates "$BACKEND_PATH" "backend"
+done
 
-# Execute the script
-main "$@"
+echo "Environment updates completed for all projects!"
