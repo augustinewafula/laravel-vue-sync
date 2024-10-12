@@ -130,17 +130,11 @@ handle_env_updates() {
     local env_type=$2  # 'frontend' or 'backend'
 
     local env_file="${project_path}/.env"
-    local env_example="${project_path}/.env.example"
 
-    # Check if .env file exists
+    # Check if .env file exists; if not, skip and log a message
     if [ ! -f "$env_file" ]; then
-        if [ -f "$env_example" ]; then
-            cp "$env_example" "$env_file"
-            echo "Created new .env file from .env.example in $project_path"
-        else
-            echo "Error: No .env or .env.example file found in $project_path"
-            return 1
-        fi
+        echo "Warning: No .env file found in $project_path, skipping..."
+        return 1
     fi
 
     # Check if env updates file exists
@@ -181,9 +175,19 @@ handle_env_updates() {
     fi
 }
 
+# Function to list all project names before updating
+list_projects() {
+    echo "Projects found in $PROJECTS_FILE:"
+    jq -r 'keys[]' "$PROJECTS_FILE"
+    echo
+}
+
 # Process each project based on the selected operation mode
 process_projects() {
     local operation=$1
+
+    # List all project names before starting the operation
+    list_projects
     
     while IFS= read -r project_path; do
         if [ -n "$project_path" ] && [ "$project_path" != "null" ]; then
