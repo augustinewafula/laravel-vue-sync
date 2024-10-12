@@ -131,15 +131,18 @@ handle_env_updates() {
 
     local env_file="${project_path}/.env"
 
-    # Check if .env file exists; if not, skip and log a message
     if [ ! -f "$env_file" ]; then
-        echo "Warning: No .env file found in $project_path, skipping..."
+    echo "Warning: No .env file found in $project_path ($env_file), skipping..."
+    return 1
+    fi
+
+    if [ ! -r "$env_file" ]; then
+        echo "Error: Cannot read .env file in $project_path ($env_file), skipping..."
         return 1
     fi
 
-    # Check if env updates file exists
-    if [ ! -f "$ENV_UPDATES_FILE" ]; then
-        echo "Error: Environment update file $ENV_UPDATES_FILE not found."
+    if [ ! -w "$env_file" ]; then
+        echo "Error: Cannot write to .env file in $project_path ($env_file), skipping..."
         return 1
     fi
 
