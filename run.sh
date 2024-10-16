@@ -113,16 +113,28 @@ done
 # Set defaults for non-interactive mode if no specific options provided
 if [ "$NON_INTERACTIVE" = true ]; then
     # Only set defaults for options that weren't explicitly set via command line
-    [[ $update_backend_choice == "n" ]] && update_backend_choice="y"
-    [[ $update_frontend_choice == "n" ]] && update_frontend_choice="y"
-    [[ $laravel_commands_choice == "n" ]] && laravel_commands_choice="y"
-    if [[ $laravel_commands_choice == "y" ]]; then
-        [[ $RUN_MIGRATE == "n" ]] && RUN_MIGRATE="y"
-        [[ $RUN_QUEUE_RESTART == "n" ]] && RUN_QUEUE_RESTART="y"
-        [[ $RUN_OPTIMIZE_CLEAR_AND_CACHE == "n" ]] && RUN_OPTIMIZE_CLEAR_AND_CACHE="y"
-        [[ $RUN_COMPOSER_INSTALL == "n" ]] && RUN_COMPOSER_INSTALL="y"
-        [[ $RUN_DUMP_AUTOLOAD == "n" ]] && RUN_DUMP_AUTOLOAD="y"
+    # Ensure backend updates are only considered when update_backend_choice is explicitly set
+    [[ $update_backend_choice == "n" && $update_frontend_choice == "n" ]] && update_frontend_choice="y"
+
+    # Apply backend Laravel commands logic only if backend update is enabled
+    if [[ $update_backend_choice == "y" ]]; then
+        [[ $laravel_commands_choice == "n" ]] && laravel_commands_choice="y"
+        
+        if [[ $laravel_commands_choice == "y" ]]; then
+            [[ $RUN_MIGRATE == "n" ]] && RUN_MIGRATE="y"
+            [[ $RUN_QUEUE_RESTART == "n" ]] && RUN_QUEUE_RESTART="y"
+            [[ $RUN_OPTIMIZE_CLEAR_AND_CACHE == "n" ]] && RUN_OPTIMIZE_CLEAR_AND_CACHE="y"
+            [[ $RUN_COMPOSER_INSTALL == "n" ]] && RUN_COMPOSER_INSTALL="y"
+            [[ $RUN_DUMP_AUTOLOAD == "n" ]] && RUN_DUMP_AUTOLOAD="y"
+        fi
     fi
+
+    # Only default frontend tool if frontend update is enabled
+    if [[ $update_frontend_choice == "y" ]]; then
+        [[ -z "$FRONTEND_BUILD_TOOL" ]] && FRONTEND_BUILD_TOOL="yarn"
+    fi
+
+    # Skip git prompt in non-interactive mode
     SKIP_GIT_PROMPT=true
 fi
 
