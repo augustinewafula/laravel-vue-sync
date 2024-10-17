@@ -17,7 +17,7 @@ NON_INTERACTIVE=false
 update_backend_choice="n"
 update_frontend_choice="n"
 laravel_commands_choice="n"
-RUN_MIGRATE="y"
+RUN_MIGRATE="n"
 RUN_QUEUE_RESTART="n"
 RUN_OPTIMIZE_CLEAR_AND_CACHE="n"
 RUN_COMPOSER_INSTALL="n"
@@ -110,16 +110,10 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-# Set defaults for non-interactive mode if no specific options provided
+# Non-interactive mode adjustments
 if [ "$NON_INTERACTIVE" = true ]; then
-    # Only set defaults for options that weren't explicitly set via command line
-    # Ensure backend updates are only considered when update_backend_choice is explicitly set
-    [[ $update_backend_choice == "n" && $update_frontend_choice == "n" ]] && update_frontend_choice="y"
-
-    # Apply backend Laravel commands logic only if backend update is enabled
+    # Backend logic if --update-backend is explicitly passed
     if [[ $update_backend_choice == "y" ]]; then
-        [[ $laravel_commands_choice == "n" ]] && laravel_commands_choice="y"
-        
         if [[ $laravel_commands_choice == "y" ]]; then
             [[ $RUN_MIGRATE == "n" ]] && RUN_MIGRATE="y"
             [[ $RUN_QUEUE_RESTART == "n" ]] && RUN_QUEUE_RESTART="y"
@@ -129,14 +123,13 @@ if [ "$NON_INTERACTIVE" = true ]; then
         fi
     fi
 
-    # Only default frontend tool if frontend update is enabled
-    if [[ $update_frontend_choice == "y" ]]; then
-        [[ -z "$FRONTEND_BUILD_TOOL" ]] && FRONTEND_BUILD_TOOL="yarn"
-    fi
+    # Default frontend tool if not specified
+    [[ $update_frontend_choice == "y" ]] && [[ -z "$FRONTEND_BUILD_TOOL" ]] && FRONTEND_BUILD_TOOL="yarn"
 
     # Skip git prompt in non-interactive mode
     SKIP_GIT_PROMPT=true
 fi
+
 
 # Function to check if a path is valid
 check_path() {
