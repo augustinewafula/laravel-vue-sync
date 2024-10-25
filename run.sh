@@ -357,4 +357,13 @@ print_summary() {
     if [[ ${#frontend_changes[@]} -gt 0 ]]; then
         echo -e "\nFrontend Updates:"
         for project in "${!frontend_changes[@]}"; do
-            echo "- $project
+            echo "- $project:"
+            echo "  * ${frontend_changes[$project]}"
+            [[ -n "${frontend_builds_run[$project]}" ]] && echo "  * Build: ${frontend_builds_run[$project]}"
+        done
+    fi
+}
+
+# Modify the final line of the script:
+print_summary
+echo -e "\nAll projects updated successfully!"
