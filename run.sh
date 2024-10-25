@@ -24,6 +24,12 @@ RUN_COMPOSER_INSTALL="n"
 RUN_DUMP_AUTOLOAD="n"
 FRONTEND_BUILD_TOOL="yarn"
 
+# Initialize tracking arrays
+declare -A backend_changes
+declare -A frontend_changes
+declare -A laravel_commands_run
+declare -A frontend_builds_run
+
 # Function to show help message
 show_help() {
     echo "Usage: $0 [options]"
@@ -130,7 +136,6 @@ if [ "$NON_INTERACTIVE" = true ]; then
     SKIP_GIT_PROMPT=true
 fi
 
-
 # Function to check if a path is valid
 check_path() {
     [ -d "$1" ] || { echo "Path $1 not found!"; return 1; }
@@ -192,50 +197,79 @@ handle_git() {
 # Function to update Laravel backend
 update_backend() {
     local path=$1
-    handle_git "$path"
+    local project_name=$(basename "$path")
+    backend_changes["$project_name"]=""
     
+    handle_git "$path"
+    local git_status=$?
+    
+    # Track git changes
+    case $git_status in
+        0) backend_changes["$project_name"]+="No changes detected. ";;
+        1) backend_changes["$project_name"]+="Local changes retained. ";;
+        2) backend_changes["$project_name"]+="Changes pulled from remote. ";;
+    esac
+    
+    # Track Laravel commands
+    local commands_run=""
     [[ $RUN_OPTIMIZE_CLEAR_AND_CACHE =~ ^[Yy]$ ]] && {
         php artisan optimize:clear
         php artisan config:cache
         php artisan route:cache
         php artisan view:cache
+        commands_run+="optimize and cache, "
     }
     
-    [[ $RUN_MIGRATE =~ ^[Yy]$ ]] && php artisan migrate --force
-    [[ $RUN_QUEUE_RESTART =~ ^[Yy]$ ]] && php artisan queue:restart
-    [[ $RUN_COMPOSER_INSTALL =~ ^[Yy]$ ]] && composer install --no-interaction
-    [[ $RUN_DUMP_AUTOLOAD =~ ^[Yy]$ ]] && composer dumpautoload
+    [[ $RUN_MIGRATE =~ ^[Yy]$ ]] && { php artisan migrate --force; commands_run+="migration, "; }
+    [[ $RUN_QUEUE_RESTART =~ ^[Yy]$ ]] && { php artisan queue:restart; commands_run+="queue restart, "; }
+    [[ $RUN_COMPOSER_INSTALL =~ ^[Yy]$ ]] && { composer install --no-interaction; commands_run+="composer install, "; }
+    [[ $RUN_DUMP_AUTOLOAD =~ ^[Yy]$ ]] && { composer dumpautoload; commands_run+="composer dump-autoload, "; }
+    
+    [[ -n "$commands_run" ]] && laravel_commands_run["$project_name"]="${commands_run%, }"
 }
 
 # Function to update frontend
 update_frontend() {
     local path=$1
+    local project_name=$(basename "$path")
+    frontend_changes["$project_name"]=""
+    
     handle_git "$path"
     local git_status=$?
-
-    # Skip build if no changes detected after git pull (git_status = 0 or 1)
+    
+    # Track git changes
+    case $git_status in
+        0) frontend_changes["$project_name"]+="No changes detected. ";;
+        1) frontend_changes["$project_name"]+="Local changes retained. ";;
+        2) frontend_changes["$project_name"]+="Changes pulled from remote. ";;
+    esac
+    
+    # Skip build if no changes detected
     if [[ $git_status -ne 2 ]]; then
-        echo "Skipping build process for $path due to no changes after git pull."
+        frontend_changes["$project_name"]+="Build skipped."
         return
     fi
 
-    # Check if deploy.sh exists in the root folder of the project
+    # Check if deploy.sh exists and track custom deployment
     if [[ -f "$path/deploy.sh" ]]; then
         echo "Found deploy.sh in $path. Using it for deployment..."
         chmod +x "$path/deploy.sh"
         "$path/deploy.sh"
+        frontend_builds_run["$project_name"]="Custom deploy script"
         return
     fi
 
-    # Proceed with frontend build if no deploy.sh is found
+    # Track standard build process
     case $FRONTEND_BUILD_TOOL in
         yarn)
             echo "Building frontend at $path using Yarn..."
             (cd "$path" && yarn && yarn build)
+            frontend_builds_run["$project_name"]="Yarn build"
             ;;
         npm)
             echo "Building frontend at $path using NPM..."
             (cd "$path" && npm install && npm run build)
+            frontend_builds_run["$project_name"]="NPM build"
             ;;
         *)
             echo "Invalid build tool. Skipping build at $path."
@@ -305,4 +339,22 @@ if [[ -n $NODE_OPTIONS ]]; then
     unset NODE_OPTIONS
 fi
 
-echo "All projects updated successfully!"
+# Print summary of all changes
+print_summary() {
+    echo -e "\n=== Update Summary ==="
+    
+    # Print backend updates
+    if [[ ${#backend_changes[@]} -gt 0 ]]; then
+        echo -e "\nBackend Updates:"
+        for project in "${!backend_changes[@]}"; do
+            echo "- $project:"
+            echo "  * ${backend_changes[$project]}"
+            [[ -n "${laravel_commands_run[$project]}" ]] && echo "  * Commands run: ${laravel_commands_run[$project]}"
+        done
+    fi
+    
+    # Print frontend updates
+    if [[ ${#frontend_changes[@]} -gt 0 ]]; then
+        echo -e "\nFrontend Updates:"
+        for project in "${!frontend_changes[@]}"; do
+            echo "- $project
