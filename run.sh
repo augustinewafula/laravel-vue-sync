@@ -78,23 +78,18 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --run-migrations)
             RUN_MIGRATE="y"
-            laravel_commands_choice="y"
             ;;
         --restart-queue)
             RUN_QUEUE_RESTART="y"
-            laravel_commands_choice="y"
             ;;
         --optimize-cache)
             RUN_OPTIMIZE_CLEAR_AND_CACHE="y"
-            laravel_commands_choice="y"
             ;;
         --composer-install)
             RUN_COMPOSER_INSTALL="y"
-            laravel_commands_choice="y"
             ;;
         --composer-dump-autoload)
             RUN_DUMP_AUTOLOAD="y"
-            laravel_commands_choice="y"
             ;;
         --all-laravel-commands)
             laravel_commands_choice="y"
